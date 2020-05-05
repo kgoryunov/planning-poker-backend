@@ -1,0 +1,11 @@
+# See https://docs.docker.com/engine/reference/builder/#dockerignore-file
+
+# Ignore everything
+*
+
+# But exceptions
+!/dist/
+!/public/
+
+!package.json
+!yarn.lock
