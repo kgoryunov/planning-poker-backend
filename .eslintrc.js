@@ -22,5 +22,16 @@ module.exports = {
         exceptAfterSingleLine: true,
       },
     ],
+    // Prefer named exports
+    'import/prefer-default-export': 'off',
+    'import/no-default-export': 'error',
   },
+  overrides: [
+    {
+      files: ['*.spec.ts'],
+      rules: {
+        'no-underscore-dangle': 'off',
+      },
+    },
+  ]
 };

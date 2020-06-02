@@ -6,28 +6,6 @@ import { createTransformer } from 'mobx-utils';
 import path from 'path';
 import socketIo from 'socket.io';
 
-const app = express();
-const server = createServer(app);
-const io = socketIo(server);
-
-// Serve content of public dir
-const publicPath = path.join(__dirname, '../public');
-app.use(
-  express.static(publicPath, {
-    setHeaders: (res, filePath) => {
-      const relativeToPublicPath = path.relative(publicPath, filePath);
-      if (relativeToPublicPath.startsWith('static/')) {
-        // Cache files in static dir for one year
-        // See https://create-react-app.dev/docs/production-build/#static-file-caching
-        res.setHeader('Cache-Control', 'max-age=31536000');
-      }
-    },
-  }),
-);
-
-const port = process.env.PORT || 3000;
-server.listen(port);
-
 class Player {
   readonly id = String(Math.random());
   @observable name: string;
@@ -39,7 +17,7 @@ class Player {
   }
 }
 
-class Room {
+export class Room {
   @observable.shallow playersById: Map<string, Player> = new Map();
   @observable createdAt = Date.now();
   @observable updatedAt = Date.now();
@@ -111,7 +89,7 @@ class Room {
   };
 }
 
-class State {
+export class State {
   @observable.shallow rooms: Map<string, Room> = new Map();
 
   getRoom = (roomName: string): Room => {
@@ -137,7 +115,7 @@ class State {
 
 const state = new State();
 
-const serializeRoomState = createTransformer((room: Room) => ({
+export const serializeRoomState = createTransformer((room: Room) => ({
   players: Array.from(room.playersById.values()).map((player) => ({
     id: player.id,
     name: player.name,
@@ -152,48 +130,77 @@ interface HandshakeQuery {
   roomName: string;
 }
 
-io.on('connection', (socket) => {
-  const { roomName } = socket.handshake.query as HandshakeQuery;
+const main = (): void => {
+  const app = express();
+  const server = createServer(app);
+  const io = socketIo(server);
 
-  socket.on('join', ({ playerName }) => {
-    socket.join(roomName);
+  // Serve content of public dir
+  const publicPath = path.join(__dirname, '../public');
+  app.use(
+    express.static(publicPath, {
+      setHeaders: (res, filePath) => {
+        const relativeToPublicPath = path.relative(publicPath, filePath);
+        if (relativeToPublicPath.startsWith('static/')) {
+          // Cache files in static dir for one year
+          // See https://create-react-app.dev/docs/production-build/#static-file-caching
+          res.setHeader('Cache-Control', 'max-age=31536000');
+        }
+      },
+    }),
+  );
 
-    if (!state.hasRoom(roomName)) {
-      state.createRoom(roomName);
+  const port = process.env.PORT || 3000;
+  server.listen(port);
 
-      // Automatically send updates when room's state changes
-      autorun(() => {
-        const roomState = state.getRoom(roomName);
-        const serializedRoomState = serializeRoomState(roomState);
+  io.on('connection', (socket) => {
+    const { roomName } = socket.handshake.query as HandshakeQuery;
 
-        io.to(roomName).emit('state', serializedRoomState);
-      });
-    }
+    socket.on('join', ({ playerName }) => {
+      socket.join(roomName);
 
-    state.getRoom(roomName).addPlayer(socket.id, playerName);
+      if (!state.hasRoom(roomName)) {
+        state.createRoom(roomName);
+
+        // Automatically send updates when room's state changes
+        autorun(() => {
+          const roomState = state.getRoom(roomName);
+          const serializedRoomState = serializeRoomState(roomState);
+
+          io.to(roomName).emit('state', serializedRoomState);
+        });
+      }
+
+      state.getRoom(roomName).addPlayer(socket.id, playerName);
+    });
+
+    socket.on('vote', ({ vote }) => {
+      const room = state.getRoom(roomName);
+      room.updateVote(socket.id, vote);
+      room.showVotesIfEveryoneVoted();
+    });
+
+    socket.on('showVotes', () => {
+      state.getRoom(roomName).showVotes();
+    });
+
+    socket.on('clearVotes', () => {
+      state.getRoom(roomName).clearVotes();
+    });
+
+    socket.on('renameSelf', ({ playerName }) => {
+      state.getRoom(roomName).renamePlayer(socket.id, playerName);
+    });
+
+    socket.on('disconnect', () => {
+      if (state.hasRoom(roomName)) {
+        state.getRoom(roomName).removePlayer(socket.id);
+      }
+    });
   });
+};
 
-  socket.on('vote', ({ vote }) => {
-    const room = state.getRoom(roomName);
-    room.updateVote(socket.id, vote);
-    room.showVotesIfEveryoneVoted();
-  });
-
-  socket.on('showVotes', () => {
-    state.getRoom(roomName).showVotes();
-  });
-
-  socket.on('clearVotes', () => {
-    state.getRoom(roomName).clearVotes();
-  });
-
-  socket.on('renameSelf', ({ playerName }) => {
-    state.getRoom(roomName).renamePlayer(socket.id, playerName);
-  });
-
-  socket.on('disconnect', () => {
-    if (state.hasRoom(roomName)) {
-      state.getRoom(roomName).removePlayer(socket.id);
-    }
-  });
-});
+// If executed directly
+if (require.main === module) {
+  main();
+}
