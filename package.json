@@ -16,7 +16,7 @@
     "express": "4.17.1",
     "mobx": "5.15.4",
     "mobx-utils": "5.5.7",
-    "socket.io": "2.3.0"
+    "socket.io": "2.4.0"
   },
   "devDependencies": {
     "@types/jest": "25.2.1",
