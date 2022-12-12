@@ -13,7 +13,7 @@
   "dependencies": {
     "@types/express": "4.17.6",
     "@types/socket.io": "2.1.4",
-    "express": "4.17.1",
+    "express": "4.17.3",
     "mobx": "5.15.4",
     "mobx-utils": "5.5.7",
     "socket.io": "2.3.0"
